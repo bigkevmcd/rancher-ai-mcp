@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -24,10 +25,43 @@ const (
 
 var rbacGVRs = map[schema.GroupVersionResource]string{
 	{Group: "management.cattle.io", Version: "v3", Resource: "clusterroletemplatebindings"}: "ClusterRoleTemplateBindingList",
+	{Group: "management.cattle.io", Version: "v3", Resource: "globalroles"}:                 "GlobalRoleList",
+	{Group: "management.cattle.io", Version: "v3", Resource: "globalrolebindings"}:          "GlobalRoleBindingList",
 	{Group: "management.cattle.io", Version: "v3", Resource: "projects"}:                    "ProjectList",
 	{Group: "management.cattle.io", Version: "v3", Resource: "projectroletemplatebindings"}: "ProjectRoleTemplateBindingList",
 	{Group: "management.cattle.io", Version: "v3", Resource: "roletemplates"}:               "RoleTemplateList",
 	{Group: "management.cattle.io", Version: "v3", Resource: "users"}:                       "UserList",
+	{Group: "management.cattle.io", Version: "v3", Resource: "userattributes"}:              "UserAttributeList",
+}
+
+// testUsers returns users u-user1 and u-user2, where u-user1 belongs to the group github_team://1234.
+func testUsers() []runtime.Object {
+	return []runtime.Object{
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "management.cattle.io/v3",
+			"kind":       "User",
+			"metadata":   map[string]any{"name": "u-user1"},
+			"username":   "user1",
+		}},
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "management.cattle.io/v3",
+			"kind":       "User",
+			"metadata":   map[string]any{"name": "u-user2"},
+			"username":   "user2",
+		}},
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "management.cattle.io/v3",
+			"kind":       "UserAttribute",
+			"metadata":   map[string]any{"name": "u-user1"},
+			"groupPrincipals": map[string]any{
+				"github": map[string]any{
+					"items": []any{
+						map[string]any{"metadata": map[string]any{"name": "github_team://1234"}, "displayName": "team"},
+					},
+				},
+			},
+		}},
+	}
 }
 
 func rbacScheme() *runtime.Scheme {
@@ -76,7 +110,7 @@ func TestAddTools(t *testing.T) {
 
 	toolsResult, err := cs.ListTools(context.Background(), &mcp.ListToolsParams{})
 	assert.NoError(t, err)
-	assert.Len(t, toolsResult.Tools, 5, "incorrect number of RBAC tools registered")
+	assert.Len(t, toolsResult.Tools, 16, "incorrect number of RBAC tools registered")
 	for _, tool := range toolsResult.Tools {
 		assert.Equal(t, toolsSet, tool.Meta[toolsSetAnn])
 	}
@@ -90,7 +124,7 @@ func TestAddToolsReadOnly(t *testing.T) {
 
 	toolsResult, err := cs.ListTools(context.Background(), &mcp.ListToolsParams{})
 	assert.NoError(t, err)
-	assert.Len(t, toolsResult.Tools, 5, "incorrect number of RBAC tools registered in read-only mode")
+	assert.Len(t, toolsResult.Tools, 8, "incorrect number of RBAC tools registered in read-only mode")
 	for _, tool := range toolsResult.Tools {
 		assert.Equal(t, toolsSet, tool.Meta[toolsSetAnn])
 	}
