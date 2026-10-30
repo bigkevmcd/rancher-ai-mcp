@@ -88,4 +88,25 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Description: `Get a role template by name.`},
 		t.getRoleTemplate,
 	)
+
+	if !t.ReadOnly {
+		mcp.AddTool(mcpServer, &mcp.Tool{
+			Name: "createProjectRoleTemplateBinding",
+			Meta: map[string]any{
+				toolsSetAnn: toolsSet,
+			},
+			Description: `Grants a user or group a role in a project by creating a project role template binding (PRTB), e.g. to add a project member.
+		Common project roles are project-owner, project-member and read-only. Defaults to project-member.
+		If the user or group already has the role in the project, no changes are made.`},
+			t.createProjectRoleTemplateBinding,
+		)
+		mcp.AddTool(mcpServer, &mcp.Tool{
+			Name: "createProjectRoleTemplateBindingPlan",
+			Meta: map[string]any{
+				toolsSetAnn: toolsSet,
+			},
+			Description: `Plans to grant a user or group a role in a project. It returns the JSON representation of the project role template binding (PRTB) to be created without actually creating it in the cluster. Only used for displaying the resource when using human validation.`},
+			t.createProjectRoleTemplateBindingPlan,
+		)
+	}
 }
