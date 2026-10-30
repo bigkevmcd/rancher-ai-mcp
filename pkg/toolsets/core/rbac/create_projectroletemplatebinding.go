@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rancher/rancher-ai-mcp/internal/middleware"
@@ -144,6 +145,8 @@ type prtbTarget struct {
 	roleTemplateName string
 	subjectField     string
 	subject          string
+	// subjectIdentities maps each PRTB field that can identify the subject to the values that match it.
+	subjectIdentities map[string][]string
 }
 
 // resolvePRTBTarget resolves the cluster, project and subject from the tool parameters.
@@ -172,6 +175,10 @@ func (t *Tools) resolvePRTBTarget(ctx context.Context, params createPRTBParams) 
 	}
 
 	subjectField, subject := "groupPrincipalName", params.Group
+	subjectIdentities := map[string][]string{
+		"groupPrincipalName": {params.Group},
+		"groupName":          {params.Group},
+	}
 	if params.User != "" {
 		users, err := t.findUser(ctx, params.User)
 		if err != nil {
@@ -181,14 +188,20 @@ func (t *Tools) resolvePRTBTarget(ctx context.Context, params createPRTBParams) 
 			return nil, fmt.Errorf("user '%s' not found", params.User)
 		}
 		subjectField, subject = "userName", users[0].GetName()
+		principalIDs, _, _ := unstructured.NestedStringSlice(users[0].Object, "principalIds")
+		subjectIdentities = map[string][]string{
+			"userName":          {subject},
+			"userPrincipalName": principalIDs,
+		}
 	}
 
 	return &prtbTarget{
-		namespace:        namespace,
-		projectName:      clusterID + ":" + projectID,
-		roleTemplateName: roleTemplateName,
-		subjectField:     subjectField,
-		subject:          subject,
+		namespace:         namespace,
+		projectName:       clusterID + ":" + projectID,
+		roleTemplateName:  roleTemplateName,
+		subjectField:      subjectField,
+		subject:           subject,
+		subjectIdentities: subjectIdentities,
 	}, nil
 }
 
@@ -205,16 +218,27 @@ func (t *Tools) findPRTBs(ctx context.Context, target *prtbTarget) ([]*unstructu
 	}
 	prtbs = filterResourcesByField(prtbs, "projectName", target.projectName)
 	prtbs = filterResourcesByField(prtbs, "roleTemplateName", target.roleTemplateName)
-	prtbs = filterResourcesByField(prtbs, target.subjectField, target.subject)
 
 	// PRTBs are kept until Rancher's finalizers have run, ignore those that are already being deleted.
 	var active []*unstructured.Unstructured
 	for _, prtb := range prtbs {
-		if prtb.GetDeletionTimestamp() == nil {
+		if prtb.GetDeletionTimestamp() == nil && target.matchesSubject(prtb) {
 			active = append(active, prtb)
 		}
 	}
 	return active, nil
+}
+
+// matchesSubject returns true if the PRTB identifies the target subject by any of its identity fields,
+// e.g. a user binding may only set userPrincipalName rather than userName.
+func (target *prtbTarget) matchesSubject(prtb *unstructured.Unstructured) bool {
+	for field, values := range target.subjectIdentities {
+		value, _, _ := unstructured.NestedString(prtb.Object, field)
+		if value != "" && slices.Contains(values, value) {
+			return true
+		}
+	}
+	return false
 }
 
 // validateProjectRoleTemplate checks that the role template exists, is a project role and is not locked.

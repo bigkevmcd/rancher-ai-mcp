@@ -44,6 +44,22 @@ func TestDeleteProjectRoleTemplateBinding(t *testing.T) {
 			expectedResult: noBindingText,
 			expectedPRTBs:  1,
 		},
+		"remove role from user bound by principal": {
+			params: deletePRTBParams{Cluster: "local", Project: "web", User: "alice"},
+			extraObjects: []runtime.Object{newMgmtObject("ProjectRoleTemplateBinding", "local-p-web", "prtb-principal", map[string]any{
+				"projectName": "local:p-web", "roleTemplateName": "project-member", "userPrincipalName": "local://u-alice",
+			})},
+			expectedResult: "role 'project-member' removed in project 'local:p-web' by deleting project role template binding(s) local-p-web/prtb-principal",
+			expectedPRTBs:  1,
+		},
+		"remove role from group bound by group name": {
+			params: deletePRTBParams{Cluster: "local", Project: "web", Group: "developers"},
+			extraObjects: []runtime.Object{newMgmtObject("ProjectRoleTemplateBinding", "local-p-web", "prtb-group", map[string]any{
+				"projectName": "local:p-web", "roleTemplateName": "project-member", "groupName": "developers",
+			})},
+			expectedResult: "role 'project-member' removed in project 'local:p-web' by deleting project role template binding(s) local-p-web/prtb-group",
+			expectedPRTBs:  1,
+		},
 		"binding already being deleted": {
 			params:         deletePRTBParams{Cluster: "local", Project: "web", User: "alice"},
 			extraObjects:   []runtime.Object{terminatingPRTB()},

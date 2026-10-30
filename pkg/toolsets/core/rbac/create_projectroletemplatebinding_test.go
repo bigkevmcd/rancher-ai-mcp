@@ -36,7 +36,7 @@ func newPRTBTestTools(extraObjects ...runtime.Object) (*Tools, *dynamicfake.Fake
 			"spec":   map[string]any{"displayName": "web"},
 			"status": map[string]any{"backingNamespace": "local-p-web"},
 		}),
-		newMgmtObject("User", "", "u-alice", map[string]any{"username": "alice"}),
+		newMgmtObject("User", "", "u-alice", map[string]any{"username": "alice", "principalIds": []any{"local://u-alice"}}),
 		newMgmtObject("RoleTemplate", "", "project-member", map[string]any{"context": "project"}),
 		newMgmtObject("RoleTemplate", "", "project-owner", map[string]any{"context": "project"}),
 		newMgmtObject("RoleTemplate", "", "cluster-owner", map[string]any{"context": "cluster"}),
@@ -56,6 +56,7 @@ func newPRTBTestTools(extraObjects ...runtime.Object) (*Tools, *dynamicfake.Fake
 func TestCreateProjectRoleTemplateBinding(t *testing.T) {
 	tests := map[string]struct {
 		params         createPRTBParams
+		extraObjects   []runtime.Object
 		expectedFields map[string]any
 		expectedResult string
 		expectedError  string
@@ -71,6 +72,13 @@ func TestCreateProjectRoleTemplateBinding(t *testing.T) {
 		"existing binding is not duplicated": {
 			params:         createPRTBParams{Cluster: "local", Project: "web", User: "u-alice", RoleTemplate: "project-owner"},
 			expectedResult: existingBindingText,
+		},
+		"existing binding by user principal is not duplicated": {
+			params: createPRTBParams{Cluster: "local", Project: "web", User: "alice"},
+			extraObjects: []runtime.Object{newMgmtObject("ProjectRoleTemplateBinding", "local-p-web", "prtb-principal", map[string]any{
+				"projectName": "local:p-web", "roleTemplateName": "project-member", "userPrincipalName": "local://u-alice",
+			})},
+			expectedResult: "role 'project-member' is already granted in project 'local:p-web' by project role template binding 'local-p-web/prtb-principal', no changes needed",
 		},
 		"user and group both specified": {
 			params:        createPRTBParams{Cluster: "local", Project: "web", User: "alice", Group: "github_team://123"},
@@ -104,7 +112,7 @@ func TestCreateProjectRoleTemplateBinding(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			tools, fakeDynClient := newPRTBTestTools()
+			tools, fakeDynClient := newPRTBTestTools(tt.extraObjects...)
 
 			result, _, err := tools.createProjectRoleTemplateBinding(
 				middleware.WithToken(t.Context(), fakeToken),
