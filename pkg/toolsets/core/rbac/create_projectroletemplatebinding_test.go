@@ -30,7 +30,7 @@ func newMgmtObject(kind, namespace, name string, fields map[string]any) *unstruc
 	return obj
 }
 
-func newPRTBTestTools() (*Tools, *dynamicfake.FakeDynamicClient) {
+func newPRTBTestTools(extraObjects ...runtime.Object) (*Tools, *dynamicfake.FakeDynamicClient) {
 	objects := []runtime.Object{
 		newMgmtObject("Project", "local", "p-web", map[string]any{
 			"spec":   map[string]any{"displayName": "web"},
@@ -45,6 +45,7 @@ func newPRTBTestTools() (*Tools, *dynamicfake.FakeDynamicClient) {
 			"projectName": "local:p-web", "roleTemplateName": "project-owner", "userName": "u-alice",
 		}),
 	}
+	objects = append(objects, extraObjects...)
 	fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs, objects...)
 	c := &client.Client{
 		DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },

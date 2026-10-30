@@ -105,6 +105,49 @@ func (t *Tools) createProjectRoleTemplateBindingPlan(ctx context.Context, toolRe
 // buildPRTB resolves the cluster, project, subject and role template and builds the PRTB granting the access.
 // If a PRTB already grants the same role to the same subject in the project, it is returned as existing instead.
 func (t *Tools) buildPRTB(ctx context.Context, params createPRTBParams) (*projectRoleTemplateBinding, error) {
+	target, err := t.resolvePRTBTarget(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := t.validateProjectRoleTemplate(ctx, target.roleTemplateName); err != nil {
+		return nil, err
+	}
+
+	prtbs, err := t.findPRTBs(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	if len(prtbs) > 0 {
+		return &projectRoleTemplateBinding{existing: prtbs[0]}, nil
+	}
+
+	prtb := &unstructured.Unstructured{
+		Object: map[string]any{
+			"projectName":       target.projectName,
+			"roleTemplateName":  target.roleTemplateName,
+			target.subjectField: target.subject,
+		},
+	}
+	prtb.SetKind("ProjectRoleTemplateBinding")
+	prtb.SetAPIVersion(converter.ManagementGroup + "/v3")
+	prtb.SetName(prtbName(target.projectName, target.roleTemplateName, target.subject))
+	prtb.SetNamespace(target.namespace)
+
+	return &projectRoleTemplateBinding{prtb: prtb}, nil
+}
+
+// prtbTarget identifies the role granted to a subject in a project by a PRTB.
+type prtbTarget struct {
+	namespace        string
+	projectName      string
+	roleTemplateName string
+	subjectField     string
+	subject          string
+}
+
+// resolvePRTBTarget resolves the cluster, project and subject from the tool parameters.
+func (t *Tools) resolvePRTBTarget(ctx context.Context, params createPRTBParams) (*prtbTarget, error) {
 	if (params.User == "") == (params.Group == "") {
 		return nil, errors.New("exactly one of user or group must be specified")
 	}
@@ -127,11 +170,6 @@ func (t *Tools) buildPRTB(ctx context.Context, params createPRTBParams) (*projec
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project backing namespace: %w", err)
 	}
-	projectName := clusterID + ":" + projectID
-
-	if err := t.validateProjectRoleTemplate(ctx, roleTemplateName); err != nil {
-		return nil, err
-	}
 
 	subjectField, subject := "groupPrincipalName", params.Group
 	if params.User != "" {
@@ -145,35 +183,38 @@ func (t *Tools) buildPRTB(ctx context.Context, params createPRTBParams) (*projec
 		subjectField, subject = "userName", users[0].GetName()
 	}
 
+	return &prtbTarget{
+		namespace:        namespace,
+		projectName:      clusterID + ":" + projectID,
+		roleTemplateName: roleTemplateName,
+		subjectField:     subjectField,
+		subject:          subject,
+	}, nil
+}
+
+// findPRTBs returns the active PRTBs granting the target role to the target subject in the project.
+func (t *Tools) findPRTBs(ctx context.Context, target *prtbTarget) ([]*unstructured.Unstructured, error) {
 	prtbs, err := t.client.GetResources(ctx, client.ListParams{
 		Cluster:   "local",
 		Kind:      "projectroletemplatebinding",
-		Namespace: namespace,
-		Token:     token,
+		Namespace: target.namespace,
+		Token:     middleware.Token(ctx),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project role template bindings: %w", err)
 	}
-	prtbs = filterResourcesByField(prtbs, "projectName", projectName)
-	prtbs = filterResourcesByField(prtbs, "roleTemplateName", roleTemplateName)
-	prtbs = filterResourcesByField(prtbs, subjectField, subject)
-	if len(prtbs) > 0 {
-		return &projectRoleTemplateBinding{existing: prtbs[0]}, nil
-	}
+	prtbs = filterResourcesByField(prtbs, "projectName", target.projectName)
+	prtbs = filterResourcesByField(prtbs, "roleTemplateName", target.roleTemplateName)
+	prtbs = filterResourcesByField(prtbs, target.subjectField, target.subject)
 
-	prtb := &unstructured.Unstructured{
-		Object: map[string]any{
-			"projectName":      projectName,
-			"roleTemplateName": roleTemplateName,
-			subjectField:       subject,
-		},
+	// PRTBs are kept until Rancher's finalizers have run, ignore those that are already being deleted.
+	var active []*unstructured.Unstructured
+	for _, prtb := range prtbs {
+		if prtb.GetDeletionTimestamp() == nil {
+			active = append(active, prtb)
+		}
 	}
-	prtb.SetKind("ProjectRoleTemplateBinding")
-	prtb.SetAPIVersion(converter.ManagementGroup + "/v3")
-	prtb.SetName(prtbName(projectName, roleTemplateName, subject))
-	prtb.SetNamespace(namespace)
-
-	return &projectRoleTemplateBinding{prtb: prtb}, nil
+	return active, nil
 }
 
 // validateProjectRoleTemplate checks that the role template exists, is a project role and is not locked.
