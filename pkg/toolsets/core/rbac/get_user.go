@@ -3,6 +3,8 @@ package rbac
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rancher/rancher-ai-mcp/internal/middleware"
@@ -43,9 +45,10 @@ func (t *Tools) getUser(ctx context.Context, toolReq *mcp.CallToolRequest, param
 	}, nil, nil
 }
 
-// findUser returns the first user whose username or metadata.name matches nameOrID, or nil if there is no match.
-// It's possible that a user could have a username that matches another user's metadata.name, but this is unlikely since metadata.name is generated.
-// We will return the first match we find in a best effort approach.
+// findUser returns the user whose metadata.name or username matches nameOrID, or nil if there is no match.
+// A metadata.name match is preferred because it is unique, so a user ID always resolves to that user even
+// if another user has it as their username. Usernames are only used if no user has the ID, and an error is
+// returned if more than one user has the username, rather than choosing one based on the list order.
 func (t *Tools) findUser(ctx context.Context, nameOrID string) (*unstructured.Unstructured, error) {
 	users, err := t.client.GetResources(ctx, client.ListParams{
 		Cluster: "local",
@@ -56,16 +59,29 @@ func (t *Tools) findUser(ctx context.Context, nameOrID string) (*unstructured.Un
 		return nil, err
 	}
 
+	var usernameMatches []*unstructured.Unstructured
 	for _, u := range users {
-		if userName, found, err := unstructured.NestedString(u.Object, "username"); err == nil && found && userName == nameOrID {
+		if u.GetName() == nameOrID {
 			return u, nil
 		}
-		if metadataName, found, err := unstructured.NestedString(u.Object, "metadata", "name"); err == nil && found && metadataName == nameOrID {
-			return u, nil
+		if userName, found, err := unstructured.NestedString(u.Object, "username"); err == nil && found && userName == nameOrID {
+			usernameMatches = append(usernameMatches, u)
 		}
 	}
 
-	return nil, nil
+	switch len(usernameMatches) {
+	case 0:
+		return nil, nil
+	case 1:
+		return usernameMatches[0], nil
+	default:
+		ids := make([]string, 0, len(usernameMatches))
+		for _, u := range usernameMatches {
+			ids = append(ids, u.GetName())
+		}
+		slices.Sort(ids)
+		return nil, fmt.Errorf("more than one user has the username %q, specify one of the user IDs: %s", nameOrID, strings.Join(ids, ", "))
+	}
 }
 
 // resolveUser returns the user whose username or ID matches nameOrID, or an error if there is no match.
