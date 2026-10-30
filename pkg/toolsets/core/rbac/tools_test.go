@@ -7,13 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rancher/rancher-ai-mcp/pkg/client/test"
+	"k8s.io/client-go/dynamic"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/rest"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -37,23 +41,9 @@ var rbacGVRs = map[schema.GroupVersionResource]string{
 // testUsers returns users u-user1 and u-user2, where u-user1 belongs to the group github_team://1234.
 func testUsers() []runtime.Object {
 	return []runtime.Object{
-		&unstructured.Unstructured{Object: map[string]any{
-			"apiVersion":   "management.cattle.io/v3",
-			"kind":         "User",
-			"metadata":     map[string]any{"name": "u-user1"},
-			"username":     "user1",
-			"principalIds": []any{"github_user://99", "local://u-user1"},
-		}},
-		&unstructured.Unstructured{Object: map[string]any{
-			"apiVersion": "management.cattle.io/v3",
-			"kind":       "User",
-			"metadata":   map[string]any{"name": "u-user2"},
-			"username":   "user2",
-		}},
-		&unstructured.Unstructured{Object: map[string]any{
-			"apiVersion": "management.cattle.io/v3",
-			"kind":       "UserAttribute",
-			"metadata":   map[string]any{"name": "u-user1"},
+		user("u-user1", "user1", map[string]any{"principalIds": []any{"github_user://99", "local://u-user1"}}),
+		user("u-user2", "user2", nil),
+		managementObject("UserAttribute", "u-user1", "", map[string]any{
 			"groupPrincipals": map[string]any{
 				"github": map[string]any{
 					"items": []any{
@@ -61,8 +51,21 @@ func testUsers() []runtime.Object {
 					},
 				},
 			},
-		}},
+		}),
 	}
+}
+
+// newTestTools returns Tools backed by a fake dynamic client containing objs, and the fake client
+// so tests can inspect or modify its state.
+func newTestTools(t *testing.T, objs ...runtime.Object) (*Tools, *dynamicfake.FakeDynamicClient) {
+	t.Helper()
+
+	fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs, objs...)
+	c := &client.Client{
+		DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },
+	}
+
+	return NewTools(test.WrapClient(c, fakeToken), false), fakeDynClient
 }
 
 func rbacScheme() *runtime.Scheme {

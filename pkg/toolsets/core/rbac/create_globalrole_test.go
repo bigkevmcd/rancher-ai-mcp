@@ -6,14 +6,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rancher/rancher-ai-mcp/internal/middleware"
-	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"github.com/rancher/rancher-ai-mcp/pkg/client/test"
 	"github.com/rancher/rancher-ai-mcp/pkg/response"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/client-go/dynamic"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/rest"
 )
 
 func TestCreateGlobalRole(t *testing.T) {
@@ -82,11 +78,7 @@ func TestCreateGlobalRole(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs)
-			c := &client.Client{
-				DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },
-			}
-			tools := NewTools(test.WrapClient(c, fakeToken), false)
+			tools, _ := newTestTools(t)
 
 			result, _, err := tools.createGlobalRole(
 				middleware.WithToken(t.Context(), fakeToken),

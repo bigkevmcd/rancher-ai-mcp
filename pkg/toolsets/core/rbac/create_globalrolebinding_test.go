@@ -6,14 +6,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rancher/rancher-ai-mcp/internal/middleware"
-	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"github.com/rancher/rancher-ai-mcp/pkg/client/test"
 	"github.com/rancher/rancher-ai-mcp/pkg/response"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/client-go/dynamic"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/rest"
 )
 
 func TestCreateGlobalRoleBinding(t *testing.T) {
@@ -63,11 +59,7 @@ func TestCreateGlobalRoleBinding(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs, testUsers()...)
-			c := &client.Client{
-				DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },
-			}
-			tools := NewTools(test.WrapClient(c, fakeToken), false)
+			tools, _ := newTestTools(t, testUsers()...)
 
 			result, _, err := tools.createGlobalRoleBinding(
 				middleware.WithToken(t.Context(), fakeToken),
@@ -95,11 +87,7 @@ func TestCreateGlobalRoleBinding(t *testing.T) {
 }
 
 func TestCreateGlobalRoleBindingPlan(t *testing.T) {
-	fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs, testUsers()...)
-	c := &client.Client{
-		DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },
-	}
-	tools := NewTools(test.WrapClient(c, fakeToken), false)
+	tools, _ := newTestTools(t, testUsers()...)
 	ctx := middleware.WithToken(t.Context(), fakeToken)
 
 	result, _, err := tools.createGlobalRoleBindingPlan(ctx, test.NewCallToolRequest(fakeURL), createGRBParams{GlobalRole: "view-rancher-metrics", User: "user1"})

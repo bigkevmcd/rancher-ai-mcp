@@ -14,11 +14,7 @@ func TestFilterBindingsForUser(t *testing.T) {
 		groups:       []string{"github_team://1234"},
 	}
 	binding := func(name string, fields map[string]any) *unstructured.Unstructured {
-		obj := map[string]any{"metadata": map[string]any{"name": name}}
-		for k, v := range fields {
-			obj[k] = v
-		}
-		return &unstructured.Unstructured{Object: obj}
+		return managementObject("ClusterRoleTemplateBinding", name, "local", fields)
 	}
 
 	tests := map[string]struct {

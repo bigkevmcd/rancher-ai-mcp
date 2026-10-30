@@ -6,64 +6,33 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rancher/rancher-ai-mcp/internal/middleware"
-	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"github.com/rancher/rancher-ai-mcp/pkg/client/test"
 	"github.com/rancher/rancher-ai-mcp/pkg/response"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/rest"
 )
 
 var globalRolesGVR = schema.GroupVersionResource{Group: "management.cattle.io", Version: "v3", Resource: "globalroles"}
 
+// deleteGlobalRoleObjects returns the custom global role gr-test assigned to u-user1, with server-managed
+// fields that should be removed from responses, and the built-in global role admin assigned to u-user2.
 func deleteGlobalRoleObjects() []runtime.Object {
+	testRole := globalRole("gr-test", map[string]any{
+		"displayName": "Test Role",
+		"status":      map[string]any{"summary": "Completed"},
+	})
+	testRole.SetManagedFields([]metav1.ManagedFieldsEntry{{Manager: "rancher", Operation: metav1.ManagedFieldsOperationUpdate}})
+	testRoleBinding := globalRoleBinding("grb-1", "gr-test", "userName", "u-user1")
+	testRoleBinding.Object["status"] = map[string]any{"summary": "Completed"}
+
 	return []runtime.Object{
-		&unstructured.Unstructured{
-			Object: map[string]any{
-				"apiVersion": "management.cattle.io/v3",
-				"kind":       "GlobalRole",
-				"metadata": map[string]any{
-					"name":          "gr-test",
-					"managedFields": []any{map[string]any{"manager": "rancher", "operation": "Update"}},
-				},
-				"displayName": "Test Role",
-				"status":      map[string]any{"summary": "Completed"},
-			},
-		},
-		&unstructured.Unstructured{
-			Object: map[string]any{
-				"apiVersion":  "management.cattle.io/v3",
-				"kind":        "GlobalRole",
-				"metadata":    map[string]any{"name": "admin"},
-				"displayName": "Admin",
-				"builtin":     true,
-			},
-		},
-		&unstructured.Unstructured{
-			Object: map[string]any{
-				"apiVersion":     "management.cattle.io/v3",
-				"kind":           "GlobalRoleBinding",
-				"metadata":       map[string]any{"name": "grb-1"},
-				"globalRoleName": "gr-test",
-				"userName":       "u-user1",
-				"status":         map[string]any{"summary": "Completed"},
-			},
-		},
-		&unstructured.Unstructured{
-			Object: map[string]any{
-				"apiVersion":     "management.cattle.io/v3",
-				"kind":           "GlobalRoleBinding",
-				"metadata":       map[string]any{"name": "grb-2"},
-				"globalRoleName": "admin",
-				"userName":       "u-user2",
-			},
-		},
+		testRole,
+		globalRole("admin", map[string]any{"displayName": "Admin", "builtin": true}),
+		testRoleBinding,
+		globalRoleBinding("grb-2", "admin", "userName", "u-user2"),
 	}
 }
 
@@ -97,11 +66,7 @@ func TestDeleteGlobalRole(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs, deleteGlobalRoleObjects()...)
-			c := &client.Client{
-				DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },
-			}
-			tools := NewTools(test.WrapClient(c, fakeToken), false)
+			tools, fakeDynClient := newTestTools(t, deleteGlobalRoleObjects()...)
 
 			result, _, err := tools.deleteGlobalRole(
 				middleware.WithToken(t.Context(), fakeToken),
@@ -125,30 +90,15 @@ func TestDeleteGlobalRole(t *testing.T) {
 }
 
 func TestDeleteGlobalRoleWithoutBindings(t *testing.T) {
-	gr := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": "management.cattle.io/v3",
-			"kind":       "GlobalRole",
-			"metadata":   map[string]any{"name": "gr-unused"},
-		},
-	}
-	fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs, gr)
-	c := &client.Client{
-		DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },
-	}
-	tools := NewTools(test.WrapClient(c, fakeToken), false)
+	tools, _ := newTestTools(t, globalRole("gr-unused", nil))
 
 	result, _, err := tools.deleteGlobalRole(middleware.WithToken(t.Context(), fakeToken), test.NewCallToolRequest(fakeURL), deleteGlobalRoleParams{Name: "gr-unused"})
 	require.NoError(t, err)
-	assert.Contains(t, result.Content[0].(*mcp.TextContent).Text, `"note":"the global role has been deleted"`)
+	assert.Equal(t, resultSummary{Names: []string{"gr-unused"}, Note: "the global role has been deleted"}, summarizeResult(t, result))
 }
 
 func TestDeleteGlobalRolePlan(t *testing.T) {
-	fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs, deleteGlobalRoleObjects()...)
-	c := &client.Client{
-		DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },
-	}
-	tools := NewTools(test.WrapClient(c, fakeToken), false)
+	tools, fakeDynClient := newTestTools(t, deleteGlobalRoleObjects()...)
 	ctx := middleware.WithToken(t.Context(), fakeToken)
 
 	result, _, err := tools.deleteGlobalRolePlan(ctx, test.NewCallToolRequest(fakeURL), deleteGlobalRoleParams{Name: "gr-test"})

@@ -6,68 +6,32 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rancher/rancher-ai-mcp/internal/middleware"
-	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"github.com/rancher/rancher-ai-mcp/pkg/client/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/dynamic"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/rest"
 	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestGetGlobalRole(t *testing.T) {
-	admin := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion":  "management.cattle.io/v3",
-			"kind":        "GlobalRole",
-			"metadata":    map[string]any{"name": "admin"},
-			"displayName": "Admin",
-			"rules": []any{
-				map[string]any{"verbs": []any{"*"}, "resources": []any{"*"}, "apiGroups": []any{"*"}},
-			},
+	admin := globalRole("admin", map[string]any{
+		"displayName": "Admin",
+		"rules": []any{
+			map[string]any{"verbs": []any{"*"}, "resources": []any{"*"}, "apiGroups": []any{"*"}},
 		},
-	}
-	nodeDrivers := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion":  "management.cattle.io/v3",
-			"kind":        "GlobalRole",
-			"metadata":    map[string]any{"name": "nodedrivers-manage"},
-			"displayName": "Manage Node Drivers",
-		},
-	}
-	duplicate1 := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion":  "management.cattle.io/v3",
-			"kind":        "GlobalRole",
-			"metadata":    map[string]any{"name": "gr-aaaaa"},
-			"displayName": "Test Role",
-		},
-	}
-	duplicate2 := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion":  "management.cattle.io/v3",
-			"kind":        "GlobalRole",
-			"metadata":    map[string]any{"name": "gr-bbbbb"},
-			"displayName": "Test Role",
-		},
-	}
-	noDisplayName := &unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": "management.cattle.io/v3",
-			"kind":       "GlobalRole",
-			"metadata":   map[string]any{"name": "gr-nodisplay"},
-		},
-	}
+	})
+	nodeDrivers := globalRole("nodedrivers-manage", map[string]any{"displayName": "Manage Node Drivers"})
+	duplicate1 := globalRole("gr-aaaaa", map[string]any{"displayName": "Test Role"})
+	duplicate2 := globalRole("gr-bbbbb", map[string]any{"displayName": "Test Role"})
+	noDisplayName := globalRole("gr-nodisplay", nil)
 
 	tests := map[string]struct {
 		params         getGlobalRoleParams
 		objects        []runtime.Object
 		reactorErr     error
-		expectedError  string
+		expected       resultSummary
 		expectedResult string
+		expectedError  string
 	}{
 		"get global role by name": {
 			params:  getGlobalRoleParams{Name: "admin"},
@@ -88,33 +52,14 @@ func TestGetGlobalRole(t *testing.T) {
 			}`,
 		},
 		"get global role by display name ignoring case": {
-			params:  getGlobalRoleParams{Name: "manage node drivers"},
-			objects: []runtime.Object{admin, nodeDrivers},
-			expectedResult: `{
-				"llm": [
-					{"apiVersion": "management.cattle.io/v3", "kind": "GlobalRole", "metadata": {"name": "nodedrivers-manage"}, "displayName": "Manage Node Drivers"}
-				],
-				"uiContext": [
-					{"cluster": "local", "kind": "GlobalRole", "name": "nodedrivers-manage", "namespace": "", "type": "globalrole"}
-				]
-			}`,
+			params:   getGlobalRoleParams{Name: "manage node drivers"},
+			objects:  []runtime.Object{admin, nodeDrivers},
+			expected: resultSummary{Names: []string{"nodedrivers-manage"}},
 		},
 		"multiple global roles with the display name": {
-			params:  getGlobalRoleParams{Name: "Test Role"},
-			objects: []runtime.Object{admin, duplicate1, duplicate2},
-			expectedResult: `{
-				"llm": {
-					"resources": [
-						{"apiVersion": "management.cattle.io/v3", "kind": "GlobalRole", "metadata": {"name": "gr-aaaaa"}, "displayName": "Test Role"},
-						{"apiVersion": "management.cattle.io/v3", "kind": "GlobalRole", "metadata": {"name": "gr-bbbbb"}, "displayName": "Test Role"}
-					],
-					"note": "multiple global roles have this display name, ask the user which one they mean"
-				},
-				"uiContext": [
-					{"cluster": "local", "kind": "GlobalRole", "name": "gr-aaaaa", "namespace": "", "type": "globalrole"},
-					{"cluster": "local", "kind": "GlobalRole", "name": "gr-bbbbb", "namespace": "", "type": "globalrole"}
-				]
-			}`,
+			params:   getGlobalRoleParams{Name: "Test Role"},
+			objects:  []runtime.Object{admin, duplicate1, duplicate2},
+			expected: resultSummary{Names: []string{"gr-aaaaa", "gr-bbbbb"}, Note: "multiple global roles have this display name, ask the user which one they mean"},
 		},
 		"no match returns the available global roles": {
 			params:  getGlobalRoleParams{Name: "Configure Node Drivers"},
@@ -140,28 +85,24 @@ func TestGetGlobalRole(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			fakeDynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(rbacScheme(), rbacGVRs, tt.objects...)
+			tools, fakeDynClient := newTestTools(t, tt.objects...)
 			if tt.reactorErr != nil {
 				fakeDynClient.PrependReactor("get", "globalroles", func(k8stesting.Action) (bool, runtime.Object, error) {
 					return true, nil, tt.reactorErr
 				})
 			}
-			c := &client.Client{
-				DynClientCreator: func(_ *rest.Config) (dynamic.Interface, error) { return fakeDynClient, nil },
-			}
-			tools := NewTools(test.WrapClient(c, fakeToken), false)
 
-			result, _, err := tools.getGlobalRole(
-				middleware.WithToken(t.Context(), fakeToken),
-				test.NewCallToolRequest(fakeURL),
-				tt.params,
-			)
+			result, _, err := tools.getGlobalRole(middleware.WithToken(t.Context(), fakeToken), test.NewCallToolRequest(fakeURL), tt.params)
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError)
-			} else {
-				require.NoError(t, err)
-				assert.JSONEq(t, tt.expectedResult, result.Content[0].(*mcp.TextContent).Text)
+				return
 			}
+			require.NoError(t, err)
+			if tt.expectedResult != "" {
+				assert.JSONEq(t, tt.expectedResult, result.Content[0].(*mcp.TextContent).Text)
+				return
+			}
+			assert.Equal(t, tt.expected, summarizeResult(t, result))
 		})
 	}
 }
