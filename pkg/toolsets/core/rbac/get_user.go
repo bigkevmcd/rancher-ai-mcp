@@ -68,14 +68,24 @@ func (t *Tools) findUser(ctx context.Context, nameOrID string) (*unstructured.Un
 	return nil, nil
 }
 
-// resolveUserID returns the user ID (metadata.name) of the user whose username or ID matches nameOrID.
-func (t *Tools) resolveUserID(ctx context.Context, nameOrID string) (string, error) {
+// resolveUser returns the user whose username or ID matches nameOrID, or an error if there is no match.
+func (t *Tools) resolveUser(ctx context.Context, nameOrID string) (*unstructured.Unstructured, error) {
 	user, err := t.findUser(ctx, nameOrID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if user == nil {
-		return "", fmt.Errorf("user %q not found, specify a username or user ID", nameOrID)
+		return nil, fmt.Errorf("user %q not found, specify a username or user ID", nameOrID)
+	}
+
+	return user, nil
+}
+
+// resolveUserID returns the user ID (metadata.name) of the user whose username or ID matches nameOrID.
+func (t *Tools) resolveUserID(ctx context.Context, nameOrID string) (string, error) {
+	user, err := t.resolveUser(ctx, nameOrID)
+	if err != nil {
+		return "", err
 	}
 
 	return user.GetName(), nil

@@ -47,13 +47,13 @@ func (t *Tools) listClusterRoleTemplateBindings(ctx context.Context, toolReq *mc
 	// Filter the resources to only include those for the specified user, or the groups the user belongs to
 	var notes []string
 	if params.User != "" {
-		userID, groups, err := t.userSubjects(ctx, params.User)
+		subjects, err := t.getUserSubjects(ctx, params.User)
 		if err != nil {
 			zap.L().Error("failed to resolve user", zapListClusterRoleTemplateBindings, zap.Error(err))
 			return nil, nil, err
 		}
-		crtbs = filterBindingsForUser(crtbs, userID, groups)
-		notes = userGroupsNote(groups)
+		crtbs = filterBindingsForUser(crtbs, subjects)
+		notes = userGroupsNote(subjects.groups)
 	}
 	// Filter the resources to only include those that match the specified group
 	if params.Group != "" {

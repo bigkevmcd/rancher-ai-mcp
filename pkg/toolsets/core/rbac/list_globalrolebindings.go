@@ -39,13 +39,13 @@ func (t *Tools) listGlobalRoleBindings(ctx context.Context, toolReq *mcp.CallToo
 	// Filter the resources to only include those for the specified user, or the groups the user belongs to
 	var notes []string
 	if params.User != "" {
-		userID, groups, err := t.userSubjects(ctx, params.User)
+		subjects, err := t.getUserSubjects(ctx, params.User)
 		if err != nil {
 			zap.L().Error("failed to resolve user", zapListGlobalRoleBindings, zap.Error(err))
 			return nil, nil, err
 		}
-		grbs = filterBindingsForUser(grbs, userID, groups)
-		notes = userGroupsNote(groups)
+		grbs = filterBindingsForUser(grbs, subjects)
+		notes = userGroupsNote(subjects.groups)
 	}
 	// Filter the resources to only include those that match the specified group
 	if params.Group != "" {

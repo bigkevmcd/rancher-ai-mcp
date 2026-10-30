@@ -84,6 +84,20 @@ func TestListClusterRoleTemplateBindings(t *testing.T) {
 		},
 	}
 
+	crtbUserPrincipal := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "management.cattle.io/v3",
+			"kind":       "ClusterRoleTemplateBinding",
+			"metadata": map[string]any{
+				"name":      "crtb-user-principal",
+				"namespace": "local",
+			},
+			"clusterName":       "local",
+			"userPrincipalName": "github_user://99",
+			"roleTemplateName":  "cluster-member",
+		},
+	}
+
 	tests := map[string]struct {
 		params         listCRTBParams
 		objects        []runtime.Object
@@ -168,6 +182,37 @@ func TestListClusterRoleTemplateBindings(t *testing.T) {
 				"uiContext": [
 					{"cluster": "local", "kind": "ClusterRoleTemplateBinding", "name": "crtb-1", "namespace": "local", "type": "clusterroletemplatebinding"},
 					{"cluster": "local", "kind": "ClusterRoleTemplateBinding", "name": "crtb-group", "namespace": "local", "type": "clusterroletemplatebinding"}
+				]
+			}`,
+		},
+		"filter by user matches userPrincipalName and legacy groupName bindings": {
+			params:  listCRTBParams{Cluster: "local", User: "user1"},
+			objects: []runtime.Object{crtb2, crtbLegacyGroup, crtbUserPrincipal},
+			expectedResult: `{
+				"llm": {
+					"resources": [
+						{
+							"apiVersion": "management.cattle.io/v3",
+							"kind": "ClusterRoleTemplateBinding",
+							"metadata": {"name": "crtb-legacy-group", "namespace": "local"},
+							"clusterName": "local",
+							"groupName": "github_team://1234",
+							"roleTemplateName": "cluster-owner"
+						},
+						{
+							"apiVersion": "management.cattle.io/v3",
+							"kind": "ClusterRoleTemplateBinding",
+							"metadata": {"name": "crtb-user-principal", "namespace": "local"},
+							"clusterName": "local",
+							"userPrincipalName": "github_user://99",
+							"roleTemplateName": "cluster-member"
+						}
+					],
+					"note": "includes bindings for the groups the user belongs to: github_team://1234"
+				},
+				"uiContext": [
+					{"cluster": "local", "kind": "ClusterRoleTemplateBinding", "name": "crtb-legacy-group", "namespace": "local", "type": "clusterroletemplatebinding"},
+					{"cluster": "local", "kind": "ClusterRoleTemplateBinding", "name": "crtb-user-principal", "namespace": "local", "type": "clusterroletemplatebinding"}
 				]
 			}`,
 		},

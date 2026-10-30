@@ -50,30 +50,43 @@ func createDeletedResourcesResponse(objs []*unstructured.Unstructured, note stri
 	return response.CreateMcpResponseAny(deletedResources{Resources: resources, Note: note})
 }
 
-// userSubjects resolves a username or user ID to the user ID, and the principal names of
-// the groups the user belongs to, so that bindings for the user's groups can be found.
-func (t *Tools) userSubjects(ctx context.Context, nameOrID string) (string, []string, error) {
-	userID, err := t.resolveUserID(ctx, nameOrID)
+// userSubjects identifies a user, and the groups they belong to, in the subjects of bindings.
+type userSubjects struct {
+	// userID is the name of the user resource, used in the userName field of bindings.
+	userID string
+	// principalIDs are the principals of the user, used in the userPrincipalName field of bindings.
+	principalIDs []string
+	// groups are the principal names of the groups the user belongs to, used in the
+	// groupPrincipalName and groupName fields of bindings.
+	groups []string
+}
+
+// getUserSubjects resolves a username or user ID to the subjects that bindings for the user, and the
+// groups the user belongs to, are made for.
+func (t *Tools) getUserSubjects(ctx context.Context, nameOrID string) (*userSubjects, error) {
+	user, err := t.resolveUser(ctx, nameOrID)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
+
+	subjects := &userSubjects{userID: user.GetName()}
+	subjects.principalIDs, _, _ = unstructured.NestedStringSlice(user.Object, "principalIds")
 
 	// Rancher records the groups a user belongs to in the UserAttribute with the same name as the user.
 	// It is only created once the user logs in, so a missing UserAttribute means the user has no groups.
 	userAttribute, err := t.client.GetResource(ctx, client.GetParams{
 		Cluster: "local",
 		Kind:    "userattribute",
-		Name:    userID,
+		Name:    subjects.userID,
 		Token:   middleware.Token(ctx),
 	})
 	if apierrors.IsNotFound(err) {
-		return userID, nil, nil
+		return subjects, nil
 	}
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to get groups for user %q: %w", userID, err)
+		return nil, fmt.Errorf("failed to get groups for user %q: %w", subjects.userID, err)
 	}
 
-	var groups []string
 	groupPrincipals, _, _ := unstructured.NestedMap(userAttribute.Object, "groupPrincipals")
 	for _, provider := range groupPrincipals {
 		providerMap, ok := provider.(map[string]any)
@@ -87,36 +100,52 @@ func (t *Tools) userSubjects(ctx context.Context, nameOrID string) (string, []st
 				continue
 			}
 			if name, found, err := unstructured.NestedString(itemMap, "metadata", "name"); err == nil && found && name != "" {
-				groups = append(groups, name)
+				subjects.groups = append(subjects.groups, name)
 			}
 		}
 	}
-	slices.Sort(groups)
+	slices.Sort(subjects.groups)
+	subjects.groups = slices.Compact(subjects.groups)
 
-	return userID, slices.Compact(groups), nil
+	return subjects, nil
 }
 
 // filterBindingsForUser returns the bindings for the user, or for any of the groups the user belongs to.
-func filterBindingsForUser(bindings []*unstructured.Unstructured, userID string, groups []string) []*unstructured.Unstructured {
+// Each binding is returned at most once.
+func filterBindingsForUser(bindings []*unstructured.Unstructured, subjects *userSubjects) []*unstructured.Unstructured {
 	var filtered []*unstructured.Unstructured
 	for _, binding := range bindings {
-		if userName, found, err := unstructured.NestedString(binding.Object, "userName"); err == nil && found && userName == userID {
-			filtered = append(filtered, binding)
-			continue
-		}
-		if group, found, err := unstructured.NestedString(binding.Object, "groupPrincipalName"); err == nil && found && slices.Contains(groups, group) {
+		if bindingMatchesUser(binding, subjects) {
 			filtered = append(filtered, binding)
 		}
 	}
 	return filtered
 }
 
-// filterBindingsForGroup returns the bindings for the group. Bindings normally record the group in
-// groupPrincipalName, but cluster and project role template bindings can also use groupName.
+func bindingMatchesUser(binding *unstructured.Unstructured, subjects *userSubjects) bool {
+	if userName, found, err := unstructured.NestedString(binding.Object, "userName"); err == nil && found && userName == subjects.userID {
+		return true
+	}
+	if principal, found, err := unstructured.NestedString(binding.Object, "userPrincipalName"); err == nil && found && slices.Contains(subjects.principalIDs, principal) {
+		return true
+	}
+	for _, field := range groupSubjectFields {
+		if group, found, err := unstructured.NestedString(binding.Object, field); err == nil && found && slices.Contains(subjects.groups, group) {
+			return true
+		}
+	}
+	return false
+}
+
+// groupSubjectFields are the fields of a binding that can record a group. Bindings normally record
+// the group in groupPrincipalName, but cluster and project role template bindings can also use groupName.
+var groupSubjectFields = []string{"groupPrincipalName", "groupName"}
+
+// filterBindingsForGroup returns the bindings for the group.
 func filterBindingsForGroup(bindings []*unstructured.Unstructured, group string) []*unstructured.Unstructured {
 	var filtered []*unstructured.Unstructured
 	for _, binding := range bindings {
-		for _, field := range []string{"groupPrincipalName", "groupName"} {
+		for _, field := range groupSubjectFields {
 			if value, found, err := unstructured.NestedString(binding.Object, field); err == nil && found && value == group {
 				filtered = append(filtered, binding)
 				break

@@ -38,10 +38,11 @@ var rbacGVRs = map[schema.GroupVersionResource]string{
 func testUsers() []runtime.Object {
 	return []runtime.Object{
 		&unstructured.Unstructured{Object: map[string]any{
-			"apiVersion": "management.cattle.io/v3",
-			"kind":       "User",
-			"metadata":   map[string]any{"name": "u-user1"},
-			"username":   "user1",
+			"apiVersion":   "management.cattle.io/v3",
+			"kind":         "User",
+			"metadata":     map[string]any{"name": "u-user1"},
+			"username":     "user1",
+			"principalIds": []any{"github_user://99", "local://u-user1"},
 		}},
 		&unstructured.Unstructured{Object: map[string]any{
 			"apiVersion": "management.cattle.io/v3",
