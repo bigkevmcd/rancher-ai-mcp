@@ -79,7 +79,8 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Meta: map[string]any{
 			toolsSetAnn: toolsSet,
 		},
-		Description: `Get a user ID by username.`},
+		Description: `Get a user by username or user ID.
+		The user ID is the metadata.name field of the user.`},
 		t.getUser,
 	)
 	mcp.AddTool(mcpServer, &mcp.Tool{

@@ -15,7 +15,7 @@ import (
 var zapGetUser = zap.String("tool", "getUser")
 
 type getUserParams struct {
-	Username string `json:"username" jsonschema:"the username of the user to retrieve"`
+	Username string `json:"username" jsonschema:"the username or user ID of the user to retrieve"`
 }
 
 func (t *Tools) getUser(ctx context.Context, toolReq *mcp.CallToolRequest, params getUserParams) (*mcp.CallToolResult, any, error) {

@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"testing"
@@ -132,4 +133,37 @@ func TestAddToolsReadOnly(t *testing.T) {
 	for _, tool := range toolsResult.Tools {
 		assert.Equal(t, toolsSet, tool.Meta[toolsSetAnn])
 	}
+}
+
+// TestUserParamDescriptions checks that every tool with a user parameter documents that it accepts a
+// username or user ID, since MCP clients use the schema description to construct arguments.
+func TestUserParamDescriptions(t *testing.T) {
+	c, err := client.NewClient(true, fakeURL)
+	require.NoError(t, err)
+	cs, cleanup := startMCPServer(t, NewTools(c, false))
+	defer cleanup()
+
+	toolsResult, err := cs.ListTools(context.Background(), &mcp.ListToolsParams{})
+	require.NoError(t, err)
+
+	var checked []string
+	for _, tool := range toolsResult.Tools {
+		schemaBytes, err := json.Marshal(tool.InputSchema)
+		require.NoError(t, err)
+		var schema struct {
+			Properties map[string]struct {
+				Description string `json:"description"`
+			} `json:"properties"`
+		}
+		require.NoError(t, json.Unmarshal(schemaBytes, &schema))
+
+		if userParam, ok := schema.Properties["user"]; ok {
+			assert.Contains(t, userParam.Description, "username or user ID", "user parameter of %s", tool.Name)
+			checked = append(checked, tool.Name)
+		}
+	}
+	assert.ElementsMatch(t, []string{
+		"createGlobalRoleBinding", "createGlobalRoleBindingPlan",
+		"listClusterRoleTemplateBindings", "listGlobalRoleBindings", "listProjectRoleTemplateBindings",
+	}, checked)
 }
