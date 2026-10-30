@@ -26,6 +26,12 @@ func terminatingPRTB() *unstructured.Unstructured {
 	return prtb
 }
 
+func lockedRolePRTB() *unstructured.Unstructured {
+	return newMgmtObject("ProjectRoleTemplateBinding", "local-p-web", "prtb-locked-role", map[string]any{
+		"projectName": "local:p-web", "roleTemplateName": "locked-role", "userName": "u-alice",
+	})
+}
+
 func TestDeleteProjectRoleTemplateBinding(t *testing.T) {
 	tests := map[string]struct {
 		params         deletePRTBParams
@@ -38,6 +44,12 @@ func TestDeleteProjectRoleTemplateBinding(t *testing.T) {
 			params:         deletePRTBParams{Cluster: "local", Project: "web", User: "alice", RoleTemplate: "project-owner"},
 			expectedResult: "role 'project-owner' removed in project 'local:p-web' by deleting project role template binding(s) local-p-web/prtb-existing",
 			expectedPRTBs:  0,
+		},
+		"remove role from locked role template": {
+			params:         deletePRTBParams{Cluster: "local", Project: "web", User: "alice", RoleTemplate: "locked-role"},
+			extraObjects:   []runtime.Object{lockedRolePRTB()},
+			expectedResult: "role 'locked-role' removed in project 'local:p-web' by deleting project role template binding(s) local-p-web/prtb-locked-role",
+			expectedPRTBs:  1,
 		},
 		"role not granted": {
 			params:         deletePRTBParams{Cluster: "local", Project: "web", User: "alice"},
@@ -100,21 +112,31 @@ func TestDeleteProjectRoleTemplateBinding(t *testing.T) {
 func TestDeleteProjectRoleTemplateBindingPlan(t *testing.T) {
 	tests := map[string]struct {
 		params         deletePRTBParams
+		extraObjects   []runtime.Object
 		expectedResult string
+		expectedPRTBs  int
 	}{
 		"plan removing role from user": {
 			params:         deletePRTBParams{Cluster: "local", Project: "web", User: "alice", RoleTemplate: "project-owner"},
 			expectedResult: `[{"type": "delete", "payload": null, "resource": {"name": "prtb-existing", "kind": "ProjectRoleTemplateBinding", "cluster": "local", "namespace": "local-p-web"}}]`,
+			expectedPRTBs:  1,
+		},
+		"plan removing role from locked role template": {
+			params:         deletePRTBParams{Cluster: "local", Project: "web", User: "alice", RoleTemplate: "locked-role"},
+			extraObjects:   []runtime.Object{lockedRolePRTB()},
+			expectedResult: `[{"type": "delete", "payload": null, "resource": {"name": "prtb-locked-role", "kind": "ProjectRoleTemplateBinding", "cluster": "local", "namespace": "local-p-web"}}]`,
+			expectedPRTBs:  2,
 		},
 		"plan for role not granted": {
 			params:         deletePRTBParams{Cluster: "local", Project: "web", User: "alice"},
 			expectedResult: noBindingText,
+			expectedPRTBs:  1,
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			tools, fakeDynClient := newPRTBTestTools()
+			tools, fakeDynClient := newPRTBTestTools(tt.extraObjects...)
 
 			result, _, err := tools.deleteProjectRoleTemplateBindingPlan(
 				middleware.WithToken(t.Context(), fakeToken),
@@ -133,7 +155,7 @@ func TestDeleteProjectRoleTemplateBindingPlan(t *testing.T) {
 			prtbs, err := fakeDynClient.Resource(converter.K8sKindsToGVRs["projectroletemplatebinding"]).
 				Namespace("local-p-web").List(t.Context(), metav1.ListOptions{})
 			require.NoError(t, err)
-			assert.Len(t, prtbs.Items, 1, "plan must not delete resources")
+			assert.Len(t, prtbs.Items, tt.expectedPRTBs, "plan must not delete resources")
 		})
 	}
 }
