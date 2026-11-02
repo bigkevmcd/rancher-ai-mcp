@@ -440,10 +440,16 @@ func (c *Client) CreateRestConfig(token string, clusterID string) (*rest.Config,
 // If body is non-nil it is JSON-encoded and sent as the request body.
 // The request is sent using the specified HTTP method (e.g., GET, POST).
 //
-// The response is expected to have a status code of 200 OK.
+// The response is expected to have a 2xx status code.
+//
+// Any other status code is returned as a *errors.StatusError (from
+// k8s.io/apimachinery/pkg/api/errors), wrapped with the request URL, so callers
+// can use the same helpers as for Kubernetes API errors, e.g.
+// errors.IsUnauthorized for an invalid or expired token (401) and
+// errors.IsForbidden when the token is valid but lacks permission (403).
 //
 // If v is non-nil the response body is assumed to be JSON and unmarshalled into
-// it.
+// it. A 204 No Content response is not unmarshalled.
 func (c *Client) GetRancherURL(ctx context.Context, token string, method string, rancherPath string, body any, v any) error {
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -479,10 +485,11 @@ func (c *Client) GetRancherURL(ctx context.Context, token string, method string,
 		return fmt.Errorf("performing HTTP request to %s: %w", requestPath, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status %d from %s", resp.StatusCode, requestPath)
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		statusErr := errors.NewGenericServerResponse(resp.StatusCode, method, schema.GroupResource{}, "", serverMessage(resp.Body), 0, true)
+		return fmt.Errorf("request to %s failed: %w", requestPath, statusErr)
 	}
-	if v != nil {
+	if v != nil && resp.StatusCode != http.StatusNoContent {
 		if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 			return fmt.Errorf("decoding response body from %s: %w", requestPath, err)
 		}
@@ -582,6 +589,29 @@ func fetchCABundle() ([]byte, error) {
 		return nil, nil
 	}
 	return []byte(value), nil
+}
+
+// maxErrorBodyBytes limits how much of an error response body is read.
+const maxErrorBodyBytes = 4096
+
+// serverMessage extracts a human-readable message from an error response body.
+//
+// Both Kubernetes Status objects and Rancher (Norman) API errors carry a
+// "message" field, which is preferred. Otherwise the trimmed body is returned.
+func serverMessage(body io.Reader) string {
+	b, err := io.ReadAll(io.LimitReader(body, maxErrorBodyBytes))
+	if err != nil {
+		return ""
+	}
+
+	var withMessage struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(b, &withMessage); err == nil && withMessage.Message != "" {
+		return withMessage.Message
+	}
+
+	return strings.TrimSpace(string(b))
 }
 
 func rootCAsFromBundle(bundle []byte) *x509.CertPool {
