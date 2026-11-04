@@ -5,6 +5,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rancher/rancher-ai-mcp/pkg/client"
+	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/core/auditlog"
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/core/projects"
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/core/rbac"
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/provisioning"
@@ -133,6 +134,8 @@ Results are paginated with limit (page size, default 100) and offset (how many r
 	projects.NewTools(t.client, t.ReadOnly).AddTools(mcpServer)
 
 	rbac.NewTools(t.client, t.ReadOnly).AddTools(mcpServer)
+
+	auditlog.NewTools(t.client).AddTools(mcpServer)
 
 	if !t.ReadOnly {
 		mcp.AddTool(mcpServer, &mcp.Tool{
