@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -20,6 +21,7 @@ type toolsClient interface {
 	GetResource(ctx context.Context, params client.GetParams) (*unstructured.Unstructured, error)
 	GetResources(ctx context.Context, params client.ListParams) ([]*unstructured.Unstructured, error)
 	GetResourceInterface(ctx context.Context, token string, namespace string, cluster string, gvr schema.GroupVersionResource) (dynamic.ResourceInterface, error)
+	CreateClientSet(ctx context.Context, token string, cluster string) (kubernetes.Interface, error)
 }
 
 // Tools contains tools for interacting with RBAC in Rancher.
@@ -82,6 +84,23 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Description: `Get a user by username or user ID.
 		The user ID is the metadata.name field of the user.`},
 		t.getUser,
+	)
+	mcp.AddTool(mcpServer, &mcp.Tool{
+		Name: "getCurrentUser",
+		Meta: map[string]any{
+			toolsSetAnn: toolsSet,
+		},
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+		Description: `Get the Rancher user that owns the credentials used to call Rancher. Use this to answer "who am I?".
+		Returns the user ID, login name, principal IDs, authentication providers (e.g. local, openldap, github) and group principals.
+		The login name comes from the provider that issued the token, so it can differ from the username on the User resource.
+		A user can have several providers; the non-local provider is the one they log in with.
+		When the MCP server is configured with a fixed token this is the owner of that token, which may not be the person asking.
+		Use getUser with the returned user ID for more details about the user.`},
+		t.getCurrentUser,
 	)
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getRoleTemplate",
