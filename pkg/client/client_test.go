@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -516,6 +517,8 @@ func TestGetRancherURL(t *testing.T) {
 		out            any
 		expectedOut    any
 		expectedErr    string
+		// errCheck, if set, must return true for the returned error.
+		errCheck func(error) bool
 	}{
 		"GET returns raw body on 200 with nil out": {
 			method:         http.MethodGet,
@@ -537,17 +540,52 @@ func TestGetRancherURL(t *testing.T) {
 			responseStatus: http.StatusOK,
 			responseBody:   `{}`,
 		},
-		"returns error on 401": {
-			method:         http.MethodGet,
+		"POST accepts 201 and unmarshals into out": {
+			method:         http.MethodPost,
 			path:           "/v1/management.cattle.io.clusters",
-			responseStatus: http.StatusUnauthorized,
-			expectedErr:    "unexpected status 401",
+			responseStatus: http.StatusCreated,
+			responseBody:   `{"kind":"Collection","data":[]}`,
+			out:            &collection{},
+			expectedOut:    &collection{Kind: "Collection", Data: []any{}},
 		},
-		"returns error on 500": {
+		"DELETE accepts 204 without unmarshalling into out": {
+			method:         http.MethodDelete,
+			path:           "/v1/management.cattle.io.clusters/c-m-12345",
+			responseStatus: http.StatusNoContent,
+			out:            &collection{},
+			expectedOut:    &collection{},
+		},
+		"returns Unauthorized error on 401 with Rancher error body": {
+			method:         http.MethodGet,
+			path:           "/v3/users",
+			responseStatus: http.StatusUnauthorized,
+			responseBody:   `{"type":"error","status":"401","message":"Unauthorized 401: must authenticate"}`,
+			expectedErr:    "/v3/users failed: the server has asked for the client to provide credentials",
+			errCheck:       apierrors.IsUnauthorized,
+		},
+		"returns Forbidden error with server message on 403": {
+			method:         http.MethodGet,
+			path:           "/v1/management.cattle.io.users",
+			responseStatus: http.StatusForbidden,
+			responseBody:   `{"kind":"Status","apiVersion":"v1","status":"Failure","message":"users.management.cattle.io is forbidden: User \"u-abc\" cannot list resource \"users\"","reason":"Forbidden","code":403}`,
+			expectedErr:    `User "u-abc" cannot list resource "users"`,
+			errCheck:       apierrors.IsForbidden,
+		},
+		"returns NotFound error on 404": {
+			method:         http.MethodGet,
+			path:           "/v1/management.cattle.io.users/missing",
+			responseStatus: http.StatusNotFound,
+			responseBody:   `404 page not found`,
+			expectedErr:    "/v1/management.cattle.io.users/missing failed",
+			errCheck:       apierrors.IsNotFound,
+		},
+		"returns InternalError with plain text body on 500": {
 			method:         http.MethodGet,
 			path:           "/v1/management.cattle.io.clusters",
 			responseStatus: http.StatusInternalServerError,
-			expectedErr:    "unexpected status 500",
+			responseBody:   "something broke\n",
+			expectedErr:    `an error on the server ("something broke")`,
+			errCheck:       apierrors.IsInternalError,
 		},
 	}
 
@@ -575,6 +613,9 @@ func TestGetRancherURL(t *testing.T) {
 			assert.Equal(t, "Bearer "+fakeToken, receivedAuth)
 			if test.expectedErr != "" {
 				require.ErrorContains(t, err, test.expectedErr)
+				if test.errCheck != nil {
+					assert.True(t, test.errCheck(err), "unexpected error type: %v", err)
+				}
 				return
 			}
 			require.NoError(t, err)
