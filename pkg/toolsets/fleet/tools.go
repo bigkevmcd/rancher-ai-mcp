@@ -4,14 +4,15 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
+
+	"github.com/rancher/rancher-ai-mcp/pkg/client"
+	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/metadata"
 )
 
 const (
-	toolsSet    = "fleet"
-	toolsSetAnn = "toolset"
+	toolsSet = "fleet"
 )
 
 type toolsClient interface {
@@ -44,31 +45,34 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getBundle",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
-		Description: `Get a specific Fleet Bundle by name and workspace.`},
+		Description: `Get a specific Fleet Bundle by name and workspace.`,
+	},
 		t.getBundle,
 	)
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getGitRepo",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
-		Description: `Get a specific GitRepo by name and workspace.`},
+		Description: `Get a specific GitRepo by name and workspace.`,
+	},
 		t.getGitRepo,
 	)
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listGitRepos",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
-		Description: `List all GitRepos in a workspace.`},
+		Description: `List all GitRepos in a workspace.`,
+	},
 		t.listGitRepos,
 	)
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "analyzeFleetResources",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Analyze Fleet resources and diagnose bundle deployment issues.
 
@@ -81,7 +85,8 @@ fields relevant for troubleshooting, making it easy to identify issues like:
 - Orphaned secrets with invalid owner references
 - Resources stuck with deletion timestamps due to finalizers
 - API server consistency issues (time travel)
-- Missing or problematic Content resources`},
+- Missing or problematic Content resources`,
+	},
 		t.analyzeFleetResources,
 	)
 }

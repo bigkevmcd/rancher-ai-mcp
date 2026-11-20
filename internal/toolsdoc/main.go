@@ -8,11 +8,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets"
+	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/metadata"
 )
 
 const outputFile = "TOOLS.md"
@@ -40,6 +42,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("listing read-only tools: %w", err)
 	}
+
 	readOnlyNames := make(map[string]struct{}, len(readOnlyTools))
 	for _, t := range readOnlyTools {
 		readOnlyNames[t.Name] = struct{}{}
@@ -65,7 +68,9 @@ func run() error {
 	if err := os.WriteFile(outputFile, []byte(doc), 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", outputFile, err)
 	}
+
 	fmt.Printf("wrote %d tools to %s\n", len(infos), outputFile)
+
 	return nil
 }
 
@@ -81,30 +86,35 @@ func listTools(ctx context.Context, readOnly bool) ([]*mcp.Tool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connecting server: %w", err)
 	}
-	defer serverSession.Close()
+	defer func() { _ = serverSession.Close() }()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "toolsdoc", Version: "doc-gen"}, nil)
+
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		return nil, fmt.Errorf("connecting client: %w", err)
 	}
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	var tools []*mcp.Tool
+
 	for tool, err := range clientSession.Tools(ctx, nil) {
 		if err != nil {
 			return nil, fmt.Errorf("iterating tools: %w", err)
 		}
+
 		tools = append(tools, tool)
 	}
+
 	return tools, nil
 }
 
 // toolsetOf returns the toolset annotation for a tool, or "other" if unset.
 func toolsetOf(t *mcp.Tool) string {
-	if ts, ok := t.Meta["toolset"].(string); ok && ts != "" {
+	if ts, ok := t.Meta[metadata.ToolsSetAnn].(string); ok && ts != "" {
 		return ts
 	}
+
 	return "other"
 }
 
@@ -119,7 +129,8 @@ func render(infos []toolInfo) string {
 	for name := range byToolset {
 		toolsetNames = append(toolsetNames, name)
 	}
-	sort.Strings(toolsetNames)
+
+	slices.Sort(toolsetNames)
 
 	var b strings.Builder
 	b.WriteString("# Available Tools\n\n")
@@ -130,18 +141,21 @@ func render(infos []toolInfo) string {
 
 	for _, name := range toolsetNames {
 		tools := byToolset[name]
-		sort.Slice(tools, func(i, j int) bool { return tools[i].name < tools[j].name })
+		slices.SortFunc(tools, func(a, b toolInfo) int { return strings.Compare(a.name, b.name) })
 
 		fmt.Fprintf(&b, "## %s\n\n", name)
 		b.WriteString("| Tool | Access | Description |\n")
 		b.WriteString("|------|--------|-------------|\n")
+
 		for _, t := range tools {
 			access := "Read-only"
 			if t.write {
 				access = "Write"
 			}
+
 			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", t.name, access, mdCell(t.description))
 		}
+
 		b.WriteString("\n")
 	}
 
@@ -154,7 +168,9 @@ func mdCell(s string) string {
 	for i, line := range lines {
 		lines[i] = strings.TrimSpace(line)
 	}
+
 	s = strings.Join(lines, "<br>")
 	s = strings.ReplaceAll(s, "|", "\\|")
+
 	return s
 }

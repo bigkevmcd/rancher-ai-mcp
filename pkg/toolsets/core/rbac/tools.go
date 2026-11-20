@@ -12,11 +12,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/rancher/rancher-ai-mcp/pkg/client"
+	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/metadata"
 )
 
 const (
-	toolsSet    = "rancher"
-	toolsSetAnn = "toolset"
+	toolsSet = "rancher"
 )
 
 type toolsClient interface {
@@ -61,7 +61,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listClusterRoleTemplateBindings",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `List all cluster role template bindings (CRTBs) in a Rancher cluster.
 		If a user is specified only returns CRTBs for that user and the groups the user belongs to.
@@ -73,7 +73,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listProjectRoleTemplateBindings",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `List all project role template bindings (PRTBs) in a Rancher cluster.
 		If a user is specified only returns PRTBs for that user and the groups the user belongs to.
@@ -86,7 +86,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listRoleTemplates",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		InputSchema: map[string]any{
 			"type":       "object",
@@ -101,7 +101,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Name:        "getUser",
 		Annotations: readOnlyAnnotations("Get user"),
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Get a user by user ID, login name, display name, principal ID, or the username they log in with at an external provider,
 		e.g. "u-abc12", "admin", "Jo Smith", "openldap_user://uid=jo,dc=example,dc=org" or "jo@example.com".
@@ -126,7 +126,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Name:        "getCurrentUser",
 		Annotations: readOnlyAnnotations("Get current user"),
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		InputSchema: map[string]any{
 			"type":       "object",
@@ -146,7 +146,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Name:        "listAuthProviders",
 		Annotations: readOnlyAnnotations("List authentication providers"),
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		InputSchema: map[string]any{
 			"type":       "object",
@@ -163,7 +163,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Name:        "listUsers",
 		Annotations: readOnlyAnnotations("List users"),
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `List Rancher users, with the same summary of each user as getUser, except that the groups each user belongs to are left out
 		to keep the list short. groupGlobalRoles is still included, so users who are administrators through a group stand out; use getUser for a user's groups.
@@ -178,7 +178,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Name:        "auditInactiveUsers",
 		Annotations: readOnlyAnnotations("Audit inactive users"),
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Audit Rancher users and report those who have not logged in or used a token for at least inactiveDays days, e.g. 90 for 3 months.
 		A user is active if they have logged in or used a token (an API key, kubeconfig or session) since the cutoff; activeByTokenUse counts users who are only active through tokens.
@@ -198,7 +198,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		Name:        "listTokenUsage",
 		Annotations: readOnlyAnnotations("List token usage"),
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Report the tokens each user has and when each was last used, from both the v3 tokens and the newer ext.cattle.io tokens.
 		Use this to find out whether a user or automation account is active through API keys or kubeconfigs, since using a token does not count as a login.
@@ -211,7 +211,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getRoleTemplate",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Get a role template by name.`,
 	},
@@ -220,7 +220,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listGlobalRoles",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		InputSchema: map[string]any{
 			"type":       "object",
@@ -234,7 +234,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getGlobalRole",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Get a global role by name or display name, including the rules and inherited cluster roles that define its permissions.
 		Names and display names are matched case-insensitively. If more than one global role matches, all of them are returned.
@@ -245,7 +245,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listGlobalRoleBindings",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `List all global role bindings (GRBs) in Rancher.
 		If a user is specified only returns GRBs for that user and the groups the user belongs to.
@@ -261,7 +261,8 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createGlobalRole",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn:                toolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			InputSchema: createGlobalRoleInputSchema(),
 			Description: `Creates a global role in Rancher.
@@ -274,7 +275,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createGlobalRolePlan",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn: toolsSet,
 			},
 			InputSchema: createGlobalRoleInputSchema(),
 			Description: `Plans to create a global role in Rancher. It returns the JSON representation of the global role to be created without actually creating it. Only used for displaying the resource when using human validation.`,
@@ -284,7 +285,8 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "deleteGlobalRole",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn:                toolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Deletes a global role by name. Built-in global roles cannot be deleted.
 			Rancher also deletes every global role binding (GRB) for the global role, so all users and groups assigned the role lose it.
@@ -295,7 +297,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "deleteGlobalRolePlan",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn: toolsSet,
 			},
 			Description: `Plans to delete a global role. It returns the JSON representation of the global role to be deleted without actually deleting it, with a caution giving the number of users and groups bound to the global role. Only used for displaying the resource when using human validation.`,
 		},
@@ -304,7 +306,8 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createGlobalRoleBinding",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn:                toolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Assigns a global role to a user or group by creating a global role binding (GRB).
 			Exactly one of user or group must be specified. The user can be a username or user ID.
@@ -315,7 +318,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createGlobalRoleBindingPlan",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn: toolsSet,
 			},
 			Description: `Plans to assign a global role to a user or group. It returns the JSON representation of the global role binding to be created without actually creating it. Only used for displaying the resource when using human validation.`,
 		},
@@ -324,7 +327,8 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createProjectRoleTemplateBinding",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn:                toolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Annotations: &mcp.ToolAnnotations{
 				ReadOnlyHint:    false,
@@ -340,7 +344,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createProjectRoleTemplateBindingPlan",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn: toolsSet,
 			},
 			Annotations: &mcp.ToolAnnotations{
 				ReadOnlyHint:    true,
@@ -355,7 +359,8 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "deleteGlobalRoleBinding",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn:                toolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Removes a global role from a user or group by deleting the global role binding (GRB) with the given name.
 			Use listGlobalRoleBindings to find the name of the binding to delete.`,
@@ -365,7 +370,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "deleteGlobalRoleBindingPlan",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn: toolsSet,
 			},
 			Description: `Plans to remove a global role from a user or group. It returns the JSON representation of the global role binding to be deleted without actually deleting it. Only used for displaying the resource when using human validation.`,
 		},

@@ -5,16 +5,18 @@ import (
 	"os"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/rancher/rancher-ai-mcp/pkg/client"
+	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/metadata"
 )
 
 const (
-	ToolsSet    = "provisioning"
-	toolsSetAnn = "toolset"
+	// ToolsSet is the name of the toolset of the provisioning tools.
+	ToolsSet = "provisioning"
 )
 
 type toolsClient interface {
@@ -44,45 +46,50 @@ func NewTools(client toolsClient, readOnly bool) *Tools {
 	}
 }
 
+// AddTools registers all provisioning tools with the provided MCP server.
 func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "analyzeCluster",
 		Meta: map[string]any{
-			toolsSetAnn: ToolsSet,
+			metadata.ToolsSetAnn: ToolsSet,
 		},
-		Description: `Returns cluster configuration and status, including provisioning and management clusters, the CAPI cluster, and machine-pool configs. Optionally include CAPI MachineDeployments, MachineSets, and/or Machines with the corresponding include flags. Use for a cluster-wide overview. Use analyzeClusterMachines or getClusterMachine for focused machine inspection.`},
+		Description: `Returns cluster configuration and status, including provisioning and management clusters, the CAPI cluster, and machine-pool configs. Optionally include CAPI MachineDeployments, MachineSets, and/or Machines with the corresponding include flags. Use for a cluster-wide overview. Use analyzeClusterMachines or getClusterMachine for focused machine inspection.`,
+	},
 		t.analyzeCluster)
 
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "analyzeClusterMachines",
 		Meta: map[string]any{
-			toolsSetAnn: ToolsSet,
+			metadata.ToolsSetAnn: ToolsSet,
 		},
-		Description: `Lists selected CAPI MachineDeployments, MachineSets, and/or Machines for a cluster. Set at least one include flag. Use when the machine name is unknown or an issue spans multiple machines; use getClusterMachine for a known machine.`},
+		Description: `Lists selected CAPI MachineDeployments, MachineSets, and/or Machines for a cluster. Set at least one include flag. Use when the machine name is unknown or an issue spans multiple machines; use getClusterMachine for a known machine.`,
+	},
 		t.analyzeClusterMachines)
 
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getClusterMachine",
 		Meta: map[string]any{
-			toolsSetAnn: ToolsSet,
+			metadata.ToolsSetAnn: ToolsSet,
 		},
-		Description: `Gets a specific CAPI machine and optionally its owning MachineSet and MachineDeployment. Set at least one include flag. Use when the machine name is known. Use analyzeClusterMachines for issues spanning multiple machines.`},
+		Description: `Gets a specific CAPI machine and optionally its owning MachineSet and MachineDeployment. Set at least one include flag. Use when the machine name is known. Use analyzeClusterMachines for issues spanning multiple machines.`,
+	},
 		t.getClusterMachine)
 
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getClusterAutoscaling",
 		Meta: map[string]any{
-			toolsSetAnn: ToolsSet,
+			metadata.ToolsSetAnn: ToolsSet,
 		},
 		Description: `Returns whether cluster autoscaling is supported, enabled and paused for an rke2 or k3s cluster, the state of the cluster-autoscaler deployment, and the autoscaling configuration (current size, minimum and maximum size) of each node pool, with a warning for node pools with an incomplete configuration.
 This should be used when the user wants to know if a cluster has the autoscaler enabled, or before changing the size or autoscaling configuration of a node pool.
-Autoscaling is only supported for clusters provisioned by Rancher with machine pools; it is not supported for the local cluster, or for custom, imported or k3k clusters.`},
+Autoscaling is only supported for clusters provisioned by Rancher with machine pools; it is not supported for the local cluster, or for custom, imported or k3k clusters.`,
+	},
 		t.getClusterAutoscaling)
 
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listK3kClusters",
 		Meta: map[string]any{
-			toolsSetAnn: ToolsSet,
+			metadata.ToolsSetAnn: ToolsSet,
 		},
 		InputSchema: map[string]any{
 			"type": "object",
@@ -96,25 +103,28 @@ Autoscaling is only supported for clusters provisioned by Rancher with machine p
 				},
 			},
 		},
-		Description: `List K3k virtual clusters deployed across downstream clusters.`},
+		Description: `List K3k virtual clusters deployed across downstream clusters.`,
+	},
 		t.getK3kClusters)
 
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listSupportedKubernetesVersions",
 		Meta: map[string]any{
-			toolsSetAnn: ToolsSet,
+			metadata.ToolsSetAnn: ToolsSet,
 		},
 		Description: `Returns the currently supported rke2 and k3s versions that can be provisioned.
-This should only be used when information about the supported rke2 and k3s is needed. This is often required to support provisioning custom and imported clusters.`},
+This should only be used when information about the supported rke2 and k3s is needed. This is often required to support provisioning custom and imported clusters.`,
+	},
 		t.listSupportedKubernetesVersions)
 
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listClusterSnapshots",
 		Meta: map[string]any{
-			toolsSetAnn: ToolsSet,
+			metadata.ToolsSetAnn: ToolsSet,
 		},
 		Description: `Lists the etcd snapshots of an rke2 or k3s cluster provisioned by Rancher, newest first.
-Returns the name, creation time, node, location, storage type (local or s3), size, and status of each snapshot.`},
+Returns the name, creation time, node, location, storage type (local or s3), size, and status of each snapshot.`,
+	},
 		t.listClusterSnapshots)
 
 	if !t.ReadOnly {
@@ -125,141 +135,160 @@ Returns the name, creation time, node, location, storage type (local or s3), siz
 			mcp.AddTool(mcpServer, &mcp.Tool{
 				Name: "investigateFailedProvisioningPlanApplication",
 				Meta: map[string]any{
-					toolsSetAnn: ToolsSet,
+					metadata.ToolsSetAnn: ToolsSet,
 				},
 				Description: `Diagnoses a failing machine plan on a single node. Deploys a short-lived privileged job that reads the node's rancher-system-agent journald logs.
 Only call this after a plan failure has been observed on that node.
 Returns log excerpts and plan fields (checksum, failure-count, last-apply-time, max-failures, plan-revision, plan-state, probe-statuses), not the full plan.
-Not available for the local cluster or non-CAPI clusters (aks, eks, gke, k3k, etc.). Do not show the logs unless explicitly asked.`},
+Not available for the local cluster or non-CAPI clusters (aks, eks, gke, k3k, etc.). Do not show the logs unless explicitly asked.`,
+			},
 				t.investigateFailedPlanApplication)
 
 			mcp.AddTool(mcpServer, &mcp.Tool{
 				Name: "investigateFailedProvisioningPlanApplicationPlan",
 				Meta: map[string]any{
-					toolsSetAnn: ToolsSet,
+					metadata.ToolsSetAnn: ToolsSet,
 				},
-				Description: `Dry-run of investigateFailedProvisioningPlanApplication. Returns the JSON of the privileged log-gathering job that would be deployed, without deploying or running it.`},
+				Description: `Dry-run of investigateFailedProvisioningPlanApplication. Returns the JSON of the privileged log-gathering job that would be deployed, without deploying or running it.`,
+			},
 				t.investigateFailedPlanApplicationPlan)
 		}
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createClusterSnapshot",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn:                ToolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Takes an etcd snapshot of an rke2 or k3s cluster provisioned by Rancher.
 This should be used when the user wants to back up a cluster, for example before upgrading it. The snapshot is taken asynchronously, use listClusterSnapshots to check when it has completed.
-Imported clusters and the local cluster are not supported.`},
+Imported clusters and the local cluster are not supported.`,
+		},
 			t.createClusterSnapshot)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createClusterSnapshotPlan",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn: ToolsSet,
 			},
 			Description: `Plans to take an etcd snapshot of an rke2 or k3s cluster provisioned by Rancher. It returns the JSON patch to be applied to the provisioning cluster without actually applying it.
 Only used for displaying the resource when using human validation. This should be used when the user wants to back up a cluster, for example before upgrading it.
-Imported clusters and the local cluster are not supported.`},
+Imported clusters and the local cluster are not supported.`,
+		},
 			t.createClusterSnapshotPlan)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "scaleClusterNodePool",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn:                ToolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Changes the size of an existing node pool for an rke2 or k3s cluster.
 This should be used when the user wants to change the size of an existing node pool for an rke2 or k3s cluster.
 Pools cannot be scaled to zero nodes, and etcd node pools cannot be scaled below 3 nodes to prevent loss of quorum.
 Node pools managed by the cluster autoscaler cannot be scaled manually; use updateNodePoolAutoscaling to change their minimum and maximum size instead.
-The local cluster does not support node pool scaling.`},
+The local cluster does not support node pool scaling.`,
+		},
 			t.scaleClusterNodePool)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "scaleClusterNodePoolPlan",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn: ToolsSet,
 			},
 			Description: `Plans to change the size of an existing node pool for an rke2 or k3s cluster. It returns the JSON representation of the updated node pool resource without actually applying the change in the cluster.
 Only used for displaying the resource when using human validation. This should be used when the user wants to change the size of an existing node pool for an rke2 or k3s cluster.
 Pools cannot be scaled to zero nodes, and etcd node pools cannot be scaled below 3 nodes to prevent loss of quorum.
 Node pools managed by the cluster autoscaler cannot be scaled manually; use updateNodePoolAutoscalingPlan to change their minimum and maximum size instead.
-The local cluster does not support node pool scaling.`},
+The local cluster does not support node pool scaling.`,
+		},
 			t.scaleClusterNodePoolPlan)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "updateNodePoolAutoscaling",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn:                ToolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Enables, changes or disables cluster autoscaling for an existing node pool of an rke2 or k3s cluster, by setting the minimum and maximum number of nodes the cluster autoscaler can scale the node pool to.
 This should be used when the user wants to enable, adjust or disable the autoscaler for a node pool. Use getClusterAutoscaling first to see the current autoscaling configuration.
 If the current size of the node pool is outside the new range, the node pool is resized to the nearest bound. The minimum size must be at least 1.
 The response includes a note if the cluster-autoscaling feature is disabled in Rancher or the autoscaler is paused for the cluster, as the node pool won't be scaled until then.
-Autoscaling is not supported for etcd node pools, as it could leave the cluster with an even number of etcd nodes. The local cluster does not support autoscaling.`},
+Autoscaling is not supported for etcd node pools, as it could leave the cluster with an even number of etcd nodes. The local cluster does not support autoscaling.`,
+		},
 			t.updateNodePoolAutoscaling)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "updateNodePoolAutoscalingPlan",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn: ToolsSet,
 			},
 			Description: `Plans to enable, change or disable cluster autoscaling for an existing node pool of an rke2 or k3s cluster. It returns the JSON patch for the cluster without actually applying the change in the cluster.
 Only used for displaying the resource when using human validation. This should be used when the user wants to enable, adjust or disable the autoscaler for a node pool.
 If the current size of the node pool is outside the new range, the node pool is resized to the nearest bound. The minimum size must be at least 1.
-Autoscaling is not supported for etcd node pools, as it could leave the cluster with an even number of etcd nodes. The local cluster does not support autoscaling.`},
+Autoscaling is not supported for etcd node pools, as it could leave the cluster with an even number of etcd nodes. The local cluster does not support autoscaling.`,
+		},
 			t.updateNodePoolAutoscalingPlan)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createK3kCluster",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn:                ToolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
-			Description: `Create a new K3k cluster in a specific downstream cluster.`},
+			Description: `Create a new K3k cluster in a specific downstream cluster.`,
+		},
 			t.createK3kCluster)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createK3kClusterPlan",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn: ToolsSet,
 			},
-			Description: `Plans to create a new K3k cluster in a specific downstream cluster. It returns the JSON representation of the resource to be created without actually creating it. Only used for displaying the resource when using human validation.`},
+			Description: `Plans to create a new K3k cluster in a specific downstream cluster. It returns the JSON representation of the resource to be created without actually creating it. Only used for displaying the resource when using human validation.`,
+		},
 			t.createK3kClusterPlan)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createImportedCluster",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn:                ToolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Creates an imported cluster within Rancher.
-This should only be used when the user wants to create a new imported cluster. Do not use this tool when the user asks to create a new custom cluster.`},
+This should only be used when the user wants to create a new imported cluster. Do not use this tool when the user asks to create a new custom cluster.`,
+		},
 			t.createImportedCluster)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createImportedClusterPlan",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn: ToolsSet,
 			},
 			Description: `Plans to create an imported cluster within Rancher. It returns the JSON representation of the resource to be created without actually creating it in the cluster. Only used for displaying the resource when using human validation.
-This should only be used when the user wants to create a new imported cluster. Do not use this tool when the user asks to create a new custom cluster.`},
+This should only be used when the user wants to create a new imported cluster. Do not use this tool when the user asks to create a new custom cluster.`,
+		},
 			t.createImportedClusterPlan)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createCustomCluster",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn:                ToolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Creates a custom cluster within Rancher.
-This should only be used when the user wants to create a new custom cluster. Do not use this tool if a user asks to create an imported cluster.`},
+This should only be used when the user wants to create a new custom cluster. Do not use this tool if a user asks to create an imported cluster.`,
+		},
 			t.createCustomCluster)
 
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createCustomClusterPlan",
 			Meta: map[string]any{
-				toolsSetAnn: ToolsSet,
+				metadata.ToolsSetAnn: ToolsSet,
 			},
 			Description: `Plans to create a custom cluster within Rancher. It returns the JSON representation of the resource to be created without actually creating it in the cluster. Only used for displaying the resource when using human validation.
-This should only be used when the user wants to create a new custom cluster. Do not use this tool if a user asks to create an imported cluster.`},
+This should only be used when the user wants to create a new custom cluster. Do not use this tool if a user asks to create an imported cluster.`,
+		},
 			t.createCustomClusterPlan)
 	}
-
 }

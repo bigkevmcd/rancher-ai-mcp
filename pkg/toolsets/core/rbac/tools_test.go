@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/rancher/rancher-ai-mcp/pkg/client"
+	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/metadata"
 )
 
 const (
@@ -102,7 +103,7 @@ func TestAddTools(t *testing.T) {
 	assert.Len(t, toolsResult.Tools, 23, "incorrect number of RBAC tools registered")
 
 	for _, tool := range toolsResult.Tools {
-		assert.Equal(t, toolsSet, tool.Meta[toolsSetAnn])
+		assert.Equal(t, toolsSet, tool.Meta[metadata.ToolsSetAnn])
 	}
 }
 
@@ -117,7 +118,7 @@ func TestAddToolsReadOnly(t *testing.T) {
 	assert.Len(t, toolsResult.Tools, 13, "incorrect number of RBAC tools registered in read-only mode")
 
 	for _, tool := range toolsResult.Tools {
-		assert.Equal(t, toolsSet, tool.Meta[toolsSetAnn])
+		assert.Equal(t, toolsSet, tool.Meta[metadata.ToolsSetAnn])
 	}
 }
 

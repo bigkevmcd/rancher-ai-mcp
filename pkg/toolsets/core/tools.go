@@ -12,13 +12,13 @@ import (
 	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/core/projects"
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/core/rbac"
+	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/metadata"
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/provisioning"
 	"github.com/rancher/rancher-ai-mcp/pkg/utils"
 )
 
 const (
-	toolsSet    = "rancher"
-	toolsSetAnn = "toolset"
+	toolsSet = "rancher"
 )
 
 type toolsClient interface {
@@ -52,7 +52,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getKubernetesResource",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Fetches a Kubernetes resource from the cluster. The namespace must be empty for all namespaces or cluster-wide resources.`,
 	},
@@ -62,7 +62,7 @@ func (t *Tools) AddTools(mcpServer *mcp.Server) {
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listKubernetesResources",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Returns a list of Kubernetes resources. The namespace must be empty for all namespaces or cluster-wide resources. Supports an optional JSONPath predicate to filter which resources are returned.
 
@@ -74,7 +74,7 @@ Results are paginated with limit (page size, default 100) and offset (how many r
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "inspectPod",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Returns all information related to a Pod. It includes its parent Deployment or StatefulSet, the CPU and memory consumption and the logs. It must be used for troubleshooting problems with pods.`,
 	},
@@ -84,7 +84,7 @@ Results are paginated with limit (page size, default 100) and offset (how many r
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getDeployment",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Returns a Deployment and its Pods. It must be used for troubleshooting problems with deployments.`,
 	},
@@ -94,7 +94,7 @@ Results are paginated with limit (page size, default 100) and offset (how many r
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getNodeMetrics",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		Description: `Returns a list of all nodes in a specified Kubernetes cluster, including their current resource utilization metrics.`,
 	},
@@ -104,7 +104,7 @@ Results are paginated with limit (page size, default 100) and offset (how many r
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "getClusterImages",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet,
+			metadata.ToolsSetAnn: toolsSet,
 		},
 		InputSchema: map[string]any{
 			"type": "object",
@@ -126,7 +126,7 @@ Results are paginated with limit (page size, default 100) and offset (how many r
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name: "listClusters",
 		Meta: map[string]any{
-			toolsSetAnn: toolsSet + "," + provisioning.ToolsSet,
+			metadata.ToolsSetAnn: toolsSet + "," + provisioning.ToolsSet,
 		},
 		// InputSchema explicitly includes "properties" to satisfy OpenAI's requirement
 		// that object schemas must have a "properties" field, even when there are no parameters.
@@ -147,7 +147,8 @@ Results are paginated with limit (page size, default 100) and offset (how many r
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createKubernetesResource",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn:                toolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			Description: `Creates a resource in a Kubernetes cluster from a complete Kubernetes manifest passed in the 'manifest' field, in YAML or JSON. The namespace must be empty for cluster-wide resources.
 
@@ -165,7 +166,7 @@ data:
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "createKubernetesResourcePlan",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn: toolsSet,
 			},
 			Description: `Plans to create a resource in a Kubernetes cluster from a complete Kubernetes manifest passed in the 'manifest' field, in YAML or JSON. It returns the JSON representation of the resource to be created without actually creating it in the cluster. Only used for displaying the resource when using human validation. The namespace must be empty for cluster-wide resources.`,
 		},
@@ -174,7 +175,8 @@ data:
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "patchKubernetesResource",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn:                toolsSet,
+				metadata.RequiresHumanValidationAnn: true,
 			},
 			InputSchema: patchResourceInputSchema(),
 			Description: `Patches a Kubernetes resource using a JSON patch. Don't ask for confirmation. The namespace must be empty for cluster-wide resources. The content type used is application/json-patch+json. Returns the modified resource.`,
@@ -185,7 +187,7 @@ data:
 		mcp.AddTool(mcpServer, &mcp.Tool{
 			Name: "patchKubernetesResourcePlan",
 			Meta: map[string]any{
-				toolsSetAnn: toolsSet,
+				metadata.ToolsSetAnn: toolsSet,
 			},
 			InputSchema: patchResourceInputSchema(),
 			Description: `Plans to patch a Kubernetes resource using a JSON patch. It returns the JSON representation of the planned update without actually applying it in the cluster. Only used for displaying the patch when using human validation. The namespace must be empty for cluster-wide resources. The content type used is application/json-patch+json. `,

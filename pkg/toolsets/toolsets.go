@@ -1,7 +1,9 @@
+// Package toolsets registers the tools of every toolset with the MCP server.
 package toolsets
 
 import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/rancher/rancher-ai-mcp/pkg/client"
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/core"
 	"github.com/rancher/rancher-ai-mcp/pkg/toolsets/fleet"
